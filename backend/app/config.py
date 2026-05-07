@@ -14,5 +14,15 @@ class Settings(BaseSettings):
     HTTP_TIMEOUT_SECONDS: float = 10.0
     LOG_LEVEL: str = "INFO"
 
+    # Milvus
+    MILVUS_HOST: str = "milvus"
+    MILVUS_PORT: int = 19530
+    MILVUS_COLLECTION: str = "wikichess_chunks"
+
+    # OpenAI
+    OPENAI_API_KEY: str = ""
+    OPENAI_EMBEDDING_MODEL: str = "text-embedding-3-large"
+    OPENAI_EMBEDDING_DIM: int = 3072
+
 
 settings = Settings()

@@ -3,3 +3,5 @@ uvicorn[standard]==0.32.1
 pydantic-settings==2.7.0
 httpx==0.28.1
 chess==1.11.2
+pymilvus==2.4.10
+openai==1.59.6

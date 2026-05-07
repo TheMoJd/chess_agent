@@ -31,7 +31,7 @@ La **chaîne de raisonnement de l'agent doit être visible** dans le panneau de 
 
 ## Stack
 
-- **Backend** : Python 3.11, FastAPI, LangGraph, python-chess, Stockfish, pymilvus, sentence-transformers, motor (Mongo async).
+- **Backend** : Python 3.11, FastAPI, LangGraph, python-chess, Stockfish, pymilvus, openai (embeddings + LLM), motor (Mongo async).
 - **Vector DB** : Milvus.
 - **Document DB** : MongoDB (sessions, historiques, caches d'API).
 - **Frontend** : Angular (Node 20 LTS) + ngx-chessboard.

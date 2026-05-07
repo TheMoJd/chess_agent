@@ -15,7 +15,7 @@ Ce document décrit l'architecture en 6 vues complémentaires (système, backend
 | 5 | State management Angular | **Signals** (Angular 17+) |
 | 6 | Stockfish | binaire embarqué dans l'image backend |
 | 7 | Source théorie d'ouvertures | **chessdb.cn** (Lichess Explorer indisponible depuis fév 2026) |
-| 8 | Embeddings RAG | `sentence-transformers/all-MiniLM-L6-v2` (384 dim) |
+| 8 | Embeddings RAG | **OpenAI `text-embedding-3-large`** (3072 dim, 8192 tokens de contexte) |
 | 9 | Responsive | desktop only (POC) |
 
 ## Périmètre fonctionnel
@@ -252,13 +252,13 @@ def youtube_search(opening_name: str) -> list[dict]:
 | Field | Type | Notes |
 |---|---|---|
 | `id` | int64 (auto) | PK |
-| `embedding` | FloatVector(384) | dim selon modèle (MiniLM-L6 = 384) |
+| `embedding` | FloatVector(3072) | OpenAI `text-embedding-3-large` (réductible via Matryoshka si besoin) |
 | `text` | VarChar(2000) | chunk de texte |
 | `opening_name` | VarChar(200) | filtre scalaire |
 | `source_url` | VarChar(500) | traçabilité |
 | `chunk_index` | int64 | ordre dans l'article source |
 
-**Index** : HNSW, metric `COSINE`, params `{M: 8, efConstruction: 64}` — suffisant pour quelques centaines de chunks.
+**Index** : HNSW, metric `IP` (vecteurs OpenAI déjà normalisés), params `{M: 8, efConstruction: 64}` — suffisant pour quelques centaines de chunks.
 
 ### Stratégie de cache
 
