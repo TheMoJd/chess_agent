@@ -2,7 +2,7 @@ import chess
 from fastapi import APIRouter, HTTPException, Path
 
 from app.models.chess import OpeningMovesResponse, TheoryMove
-from app.services.lichess import LichessError, fetch_opening_moves
+from app.services.chessdb import ChessDBError, fetch_opening_moves
 
 router = APIRouter(prefix="/api/v1", tags=["Échecs"])
 
@@ -12,7 +12,10 @@ async def get_theory_moves(
     fen: str = Path(..., description="Position FEN URL-encodée (slashes et espaces)."),
 ) -> OpeningMovesResponse:
     """
-    Renvoie les coups théoriques de la base "masters" de Lichess pour la position donnée.
+    Renvoie les coups théoriques connus pour la position donnée.
+
+    Source: chessdb.cn (l'API Lichess Opening Explorer étant indisponible
+    depuis février 2026 — voir services/chessdb.py).
     """
     try:
         chess.Board(fen)
@@ -21,13 +24,14 @@ async def get_theory_moves(
 
     try:
         result = await fetch_opening_moves(fen)
-    except LichessError as exc:
+    except ChessDBError as exc:
         raise HTTPException(
-            status_code=502, detail=f"Lichess API indisponible: {exc}"
+            status_code=502, detail=f"chessdb.cn indisponible: {exc}"
         ) from exc
 
     return OpeningMovesResponse(
         fen=fen,
+        source=result["source"],
         opening_name=result["opening_name"],
         eco=result["eco"],
         moves=[TheoryMove(**m) for m in result["moves"]],

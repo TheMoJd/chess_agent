@@ -1,4 +1,10 @@
-"""Client async pour l'API Lichess Opening Explorer (base masters)."""
+"""Client async pour l'API Lichess Opening Explorer (base masters).
+
+Note: au moment du POC (mai 2026), explorer.lichess.ovh est indisponible
+(401/429 systématiques depuis l'incident OVH de février 2026, ticket lila #19610).
+Ce service est conservé pour réactivation immédiate dès le rétablissement.
+La source de théorie active est actuellement chessdb.cn (voir services/chessdb.py).
+"""
 import logging
 from typing import Any
 
@@ -19,6 +25,7 @@ async def fetch_opening_moves(fen: str) -> dict[str, Any]:
 
     Returns:
         {
+            "source": "lichess",
             "opening_name": str | None,
             "eco": str | None,
             "moves": list[{san, uci, white, draws, black, total_games, average_rating}]
@@ -27,7 +34,7 @@ async def fetch_opening_moves(fen: str) -> dict[str, Any]:
     Raises:
         LichessError: timeout, erreur réseau, ou réponse non-JSON.
     """
-    timeout = httpx.Timeout(settings.LICHESS_TIMEOUT_SECONDS, connect=5.0)
+    timeout = httpx.Timeout(settings.HTTP_TIMEOUT_SECONDS, connect=5.0)
     url = f"{settings.LICHESS_EXPLORER_BASE}/masters"
     try:
         async with httpx.AsyncClient(timeout=timeout) as client:
@@ -52,6 +59,7 @@ async def fetch_opening_moves(fen: str) -> dict[str, Any]:
     ]
     opening = data.get("opening") or {}
     return {
+        "source": "lichess",
         "opening_name": opening.get("name"),
         "eco": opening.get("eco"),
         "moves": moves,

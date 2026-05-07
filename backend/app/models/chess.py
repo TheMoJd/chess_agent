@@ -4,15 +4,23 @@ from pydantic import BaseModel, Field
 class TheoryMove(BaseModel):
     san: str
     uci: str
-    white: int
-    draws: int
-    black: int
-    total_games: int
-    average_rating: int | None = None
+    score_centipawns: int | None = Field(
+        None, description="Score d'évaluation du coup (centipions, POV trait à jouer)."
+    )
+    rank: int | None = Field(
+        None, description="Classement chessdb (0 = mauvais, plus haut = meilleur)."
+    )
+    note: str | None = Field(
+        None, description="Annotation chess (!, ?, !!, etc.) si fournie par la source."
+    )
+    winrate: float | None = Field(
+        None, description="Taux de victoire en pourcentage (0-100) si fourni."
+    )
 
 
 class OpeningMovesResponse(BaseModel):
     fen: str
+    source: str = Field(..., description="Source de la donnée (chessdb.cn, lichess, ...).")
     opening_name: str | None = None
     eco: str | None = None
     moves: list[TheoryMove]

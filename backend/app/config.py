@@ -6,8 +6,12 @@ class Settings(BaseSettings):
 
     BACKEND_PORT: int = 8000
     STOCKFISH_PATH: str = "/usr/games/stockfish"
+
+    # Sources de théorie d'ouvertures
+    CHESSDB_BASE: str = "https://www.chessdb.cn"
     LICHESS_EXPLORER_BASE: str = "https://explorer.lichess.ovh"
-    LICHESS_TIMEOUT_SECONDS: float = 10.0
+
+    HTTP_TIMEOUT_SECONDS: float = 10.0
     LOG_LEVEL: str = "INFO"
 
 

@@ -14,8 +14,9 @@ Ce document décrit l'architecture en 6 vues complémentaires (système, backend
 | 4 | Streaming reasoning trace | **SSE** (Server-Sent Events) via `astream_events` |
 | 5 | State management Angular | **Signals** (Angular 17+) |
 | 6 | Stockfish | binaire embarqué dans l'image backend |
-| 7 | Embeddings RAG | `sentence-transformers/all-MiniLM-L6-v2` (384 dim) |
-| 8 | Responsive | desktop only (POC) |
+| 7 | Source théorie d'ouvertures | **chessdb.cn** (Lichess Explorer indisponible depuis fév 2026) |
+| 8 | Embeddings RAG | `sentence-transformers/all-MiniLM-L6-v2` (384 dim) |
+| 9 | Responsive | desktop only (POC) |
 
 ## Périmètre fonctionnel
 
@@ -103,7 +104,8 @@ backend/
 │   │   ├── prompts.py             # SYSTEM_PROMPT
 │   │   └── tools.py               # tools exposés au LLM (wrappers sur services)
 │   ├── services/                  # COUCHE 3 — logique métier
-│   │   ├── lichess.py             # client API Lichess + parsing
+│   │   ├── chessdb.py             # client chessdb.cn (source théorie active)
+│   │   ├── lichess.py             # client Lichess (préservé, à réactiver)
 │   │   ├── stockfish_engine.py    # wrapper Stockfish UCI via python-chess
 │   │   ├── youtube.py             # client YouTube Data API v3
 │   │   └── wikichess.py           # ingestion + recherche vectorielle
@@ -186,9 +188,10 @@ agent = create_react_agent(llm, tools=TOOLS, prompt=SYSTEM_PROMPT)
 
 ```python
 @tool
-def lichess_opening_lookup(fen: str) -> dict:
-    """Renvoie le nom de l'ouverture et les coups théoriques avec leurs stats."""
-    # → {opening_name, theory_moves: [{san, win_rate, games}]}
+def opening_theory_lookup(fen: str) -> dict:
+    """Renvoie les coups théoriques connus pour une position donnée."""
+    # Source actuelle: chessdb.cn (l'API Lichess Explorer étant down depuis fév 2026)
+    # → {source, moves: [{san, uci, score_centipawns, rank, note, winrate}], opening_name, eco}
 
 @tool
 def stockfish_evaluate(fen: str, depth: int = 15) -> dict:
@@ -227,9 +230,9 @@ def youtube_search(opening_name: str) -> list[dict]:
 }
 ```
 
-**`lichess_cache`** — TTL 7 jours, clé = FEN.
+**`opening_theory_cache`** — TTL 7 jours, clé = FEN. Source actuelle : chessdb.cn.
 ```json
-{ "_id": "fen-string", "opening_name": "...", "theory_moves": [...], "fetched_at": "..." }
+{ "_id": "fen-string", "source": "chessdb.cn", "moves": [...], "opening_name": null, "fetched_at": "..." }
 ```
 
 **`stockfish_cache`** — TTL infini (Stockfish déterministe), clé = `fen|depth=N`.
@@ -308,7 +311,7 @@ Côté Angular : `EventSource` consomme le flux, met à jour les Signals `reason
 Exposés en REST classique pour validation OC, debug et fallback front :
 
 - `GET /api/v1/healthcheck` → `{"status": "ok"}`
-- `GET /api/v1/moves/{fen}` → délègue à `services/lichess.py`
+- `GET /api/v1/moves/{fen}` → délègue à `services/chessdb.py` (théorie d'ouvertures)
 - `GET /api/v1/evaluate/{fen}?depth=15` → délègue à `services/stockfish_engine.py`
 - `GET /api/v1/vector-search?q=...&top_k=3` → délègue à `services/wikichess.py`
 - `GET /api/v1/videos/{opening}` → délègue à `services/youtube.py`
