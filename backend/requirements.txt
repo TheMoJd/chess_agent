@@ -5,3 +5,4 @@ httpx==0.28.1
 chess==1.11.2
 pymilvus==2.4.10
 openai==1.59.6
+python-dotenv==1.0.1
