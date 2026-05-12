@@ -124,16 +124,11 @@ def embed_batch(client: OpenAI, texts: list[str]) -> list[list[float]]:
     Returns:
         Liste de vecteurs (un par texte d'entrée), dans le même ordre.
         Chaque vecteur = list[float] de dimension EMBEDDING_DIM.
-
-    Indices :
-      - L'API : `client.embeddings.create(model=EMBEDDING_MODEL, input=texts)`
-      - La réponse a une propriété `.data` qui est une list d'objects.
-        Chaque object a `.embedding` (list[float]) et `.index` (int).
-      - Important : OpenAI préserve l'ordre, mais l'API doc recommande de
-        trier par `.index` au cas où — fais-le pour être robuste.
     """
-    raise NotImplementedError("À TOI : appelle l'API OpenAI et renvoie la liste des embeddings")
-
+    response = client.embeddings.create(model=EMBEDDING_MODEL, input=texts)
+    # on trie les embeddngs pour correspondre à l'ordre des chunks 
+    sorted_data = sorted(response.data, key=lambda e: e.index)
+    return [e.embedding for e in sorted_data]
 
 # ============================================================================
 # TODO 2 — à toi
@@ -151,16 +146,20 @@ def insert_batch(
     Returns:
         Nombre d'entités insérées.
 
-    Indices :
-      - Milvus accepte deux formats : column-oriented (list of lists) ou
-        row-oriented (list of dicts). En pymilvus 2.4 le row-oriented est
-        souvent plus lisible : `collection.insert([{"f1": v, "f2": v, ...}, ...])`.
-      - **Attention** : `section` peut être None (intro avant la première H2).
-        Milvus VarChar n'accepte pas None — convertis en chaîne vide "".
-      - N'inclus pas le champ `id` (il est auto_id=True).
-      - Le retour de `collection.insert(...)` a un attribut `.insert_count`.
     """
-    raise NotImplementedError("À TOI : insère chunks + embeddings dans la collection")
+    rows = [
+        {
+            "embedding": e,
+            "opening_name": c["opening_name"],
+            "section": c["section"] or "",
+            "source_url": c["source_url"] or "",
+            "chunk_index": c["chunk_index"],
+            "text": c["text"],
+        }
+        for c, e in zip(chunks, embeddings)
+    ]
+    result = collection.insert(rows)
+    return result.insert_count
 
 
 # ============================================================================
