@@ -32,5 +32,9 @@ class Settings(BaseSettings):
     OPENAI_EMBEDDING_MODEL: str = "text-embedding-3-large"
     OPENAI_EMBEDDING_DIM: int = 3072
 
+    # YouTube Data API v3
+    YOUTUBE_API_KEY: str = ""
+    YOUTUBE_API_BASE: str = "https://www.googleapis.com/youtube/v3"
+
 
 settings = Settings()

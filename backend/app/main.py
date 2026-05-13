@@ -1,6 +1,7 @@
 import logging
 from contextlib import asynccontextmanager
 
+import httpx
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from openai import AsyncOpenAI
@@ -10,6 +11,7 @@ from app.api.evaluate import router as evaluate_router
 from app.api.healthcheck import router as healthcheck_router
 from app.api.moves import router as moves_router
 from app.api.vector_search import router as vector_search_router
+from app.api.videos import router as videos_router
 from app.config import settings
 
 logger = logging.getLogger(__name__)
@@ -36,15 +38,17 @@ async def lifespan(app: FastAPI):
     collection.load()
     app.state.milvus_collection = collection
     app.state.openai_client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
+    app.state.http_client = httpx.AsyncClient(timeout=settings.HTTP_TIMEOUT_SECONDS)
     logger.info(
-        "Lifespan startup: Milvus connecté (%d entités), OpenAI prêt",
+        "Lifespan startup: Milvus connecté (%d entités), OpenAI + HTTP client prêts",
         collection.num_entities,
     )
 
     yield
 
+    await app.state.http_client.aclose()
     connections.disconnect(alias="default")
-    logger.info("Lifespan shutdown: Milvus déconnecté")
+    logger.info("Lifespan shutdown: HTTP client fermé, Milvus déconnecté")
 
 
 app = FastAPI(
@@ -66,3 +70,4 @@ app.include_router(healthcheck_router)
 app.include_router(moves_router)
 app.include_router(evaluate_router)
 app.include_router(vector_search_router)
+app.include_router(videos_router)
