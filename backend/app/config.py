@@ -18,6 +18,14 @@ class Settings(BaseSettings):
     MILVUS_HOST: str = "milvus"
     MILVUS_PORT: int = 19530
     MILVUS_COLLECTION: str = "wikichess_chunks"
+    # Override pour le dev local hors Docker : MILVUS_HOST_OVERRIDE=localhost
+    # (le service `milvus` n'existe en DNS que sur le réseau Docker `chess_net`).
+    MILVUS_HOST_OVERRIDE: str | None = None
+
+    @property
+    def milvus_host(self) -> str:
+        """Hostname Milvus effectif (override > config)."""
+        return self.MILVUS_HOST_OVERRIDE or self.MILVUS_HOST
 
     # OpenAI
     OPENAI_API_KEY: str = ""
