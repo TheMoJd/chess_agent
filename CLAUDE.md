@@ -6,12 +6,12 @@ POC d'un agent IA pour l'apprentissage des ouvertures aux échecs, commandé par
 
 ## Architecture cible — pure agentique
 
-LangGraph + LLM avec **tool-calling**. Le LLM est l'orchestrateur, pas un `if/else` codé en dur. Quatre tools exposés à l'agent :
+LangGraph + LLM avec **tool-calling**. Le LLM est l'orchestrateur, pas un `if/else` codé en dur. Quatre tools exposés à l'agent (nommés par leur **capacité**, pas par leur fournisseur) :
 
-- `lichess_opening_lookup(fen)` — coups théoriques + nom de l'ouverture (API Lichess).
+- `opening_theory_lookup(fen)` — coups théoriques + nom de l'ouverture. Source actuelle : chessdb.cn (l'API Lichess Opening Explorer est indisponible depuis l'incident OVH de février 2026, voir [services/lichess.py](backend/app/services/lichess.py) pour réactivation future).
 - `stockfish_evaluate(fen)` — meilleur coup + score (centipawns), utilisé hors théorie.
-- `wikichess_vector_search(query)` — RAG Milvus sur articles Wikichess.
-- `youtube_search(opening_name)` — vidéos pertinentes (YouTube Data API v3).
+- `wikichess_search(query)` — RAG Milvus sur articles Wikichess.
+- `find_chess_videos(opening_name)` — vidéos pertinentes (YouTube Data API v3).
 
 La **chaîne de raisonnement de l'agent doit être visible** dans le panneau de droite du front (c'est le wow factor du POC).
 
@@ -76,7 +76,8 @@ uvicorn app.main:app --reload
 - **Variables d'env** via `.env` (jamais commiter de secrets). `.env.example` à jour.
 - **Endpoints** préfixés `/api/v1/`.
 - **Stockfish** est un *outil* de l'agent, pas un adversaire (sauf en stretch).
-- **Lichess avant Stockfish** : on consulte d'abord la théorie, on tombe sur Stockfish seulement hors théorie.
+- **Théorie avant Stockfish** : `opening_theory_lookup` est appelé en premier, Stockfish n'intervient qu'en cas de position hors théorie. La règle est portée par le system prompt de l'agent, pas par du code.
+- **Naming des tools agent-side** : abstraire le fournisseur (ex: `opening_theory_lookup` plutôt que `chessdb_query`). Exception assumée : `stockfish_evaluate` car "Stockfish" est devenu un terme générique chez les joueurs d'échecs.
 
 ## Volet stratégique (étude, pas à coder)
 

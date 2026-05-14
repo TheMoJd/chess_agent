@@ -7,6 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from openai import AsyncOpenAI
 from pymilvus import Collection, connections, utility
 
+from app.agent.builder import build_agent
 from app.api.evaluate import router as evaluate_router
 from app.api.healthcheck import router as healthcheck_router
 from app.api.moves import router as moves_router
@@ -39,9 +40,18 @@ async def lifespan(app: FastAPI):
     app.state.milvus_collection = collection
     app.state.openai_client = AsyncOpenAI(api_key=settings.OPENAI_API_KEY)
     app.state.http_client = httpx.AsyncClient(timeout=settings.HTTP_TIMEOUT_SECONDS)
+
+    # Agent LangGraph — créé une fois, réutilisé par toutes les requêtes /chat
+    app.state.agent = build_agent(
+        milvus_collection=collection,
+        openai_client=app.state.openai_client,
+        http_client=app.state.http_client,
+    )
+
     logger.info(
-        "Lifespan startup: Milvus connecté (%d entités), OpenAI + HTTP client prêts",
+        "Lifespan startup: Milvus (%d entités), OpenAI, HTTP, agent (%s) prêts",
         collection.num_entities,
+        settings.OPENAI_CHAT_MODEL,
     )
 
     yield

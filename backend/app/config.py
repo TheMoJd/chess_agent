@@ -31,6 +31,8 @@ class Settings(BaseSettings):
     OPENAI_API_KEY: str = ""
     OPENAI_EMBEDDING_MODEL: str = "text-embedding-3-large"
     OPENAI_EMBEDDING_DIM: int = 3072
+    OPENAI_CHAT_MODEL: str = "gpt-4o-mini"
+    OPENAI_CHAT_TEMPERATURE: float = 0.3
 
     # YouTube Data API v3
     YOUTUBE_API_KEY: str = ""
