@@ -10,5 +10,8 @@ python-dotenv==1.0.1
 langgraph==0.2.74
 langchain-core==0.3.29
 langchain-openai==0.2.14
+langgraph-checkpoint-mongodb==0.1.1
+# MongoDB async driver (utilisé par le checkpointer + futures features)
+motor==3.6.0
 # Patch setuptools < 81 pour pymilvus (cf. memo de l'install initiale)
 setuptools==80.10.2

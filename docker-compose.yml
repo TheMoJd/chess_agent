@@ -12,6 +12,8 @@ services:
     depends_on:
       milvus:
         condition: service_healthy
+      mongo:
+        condition: service_healthy
     restart: unless-stopped
 
   # === Milvus (RAG vector DB) ===
@@ -86,6 +88,26 @@ services:
       retries: 5
     restart: unless-stopped
 
+  # === MongoDB ===
+  # Sert pour : checkpoints LangGraph (persistance des sessions agent).
+  # Évolution prévue : caches d'API (chessdb, YouTube), historique de parties.
+  mongo:
+    image: mongo:7
+    container_name: chess_agent_mongo
+    ports:
+      - "${MONGO_PORT:-27017}:27017"
+    volumes:
+      - mongo_data:/data/db
+    networks:
+      - chess_net
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    restart: unless-stopped
+
 networks:
   chess_net:
     driver: bridge
@@ -94,3 +116,4 @@ volumes:
   etcd_data:
   minio_data:
   milvus_data:
+  mongo_data:

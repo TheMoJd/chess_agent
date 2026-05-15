@@ -11,6 +11,7 @@ réutilisé pour toutes les requêtes utilisateur via app.state.agent.
 import httpx
 from langchain_core.messages import SystemMessage
 from langchain_openai import ChatOpenAI
+from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.graph.graph import CompiledGraph
 from langgraph.prebuilt import create_react_agent
 from openai import AsyncOpenAI
@@ -66,14 +67,19 @@ def build_agent(
     milvus_collection: Collection,
     openai_client: AsyncOpenAI,
     http_client: httpx.AsyncClient,
+    checkpointer: BaseCheckpointSaver | None = None,
 ) -> CompiledGraph:
     """Compose et compile l'agent ReAct prêt à l'emploi.
 
+    Args:
+        checkpointer: si fourni, persiste les threads de conversation. Permet
+            la reprise de session (LangGraph va chercher l'historique du
+            thread_id passé en config à chaque invocation).
+
     Returns:
         Un graph LangGraph compilé. Méthodes utiles :
-        - `await agent.ainvoke({"messages": [...]})` : exécution complète, retourne l'état final.
-        - `agent.astream_events({"messages": [...]}, version="v2")` : streaming
-          des événements intermédiaires (pour le reasoning trace).
+        - `await agent.ainvoke({"messages": [...]}, config=...)` : exécution complète.
+        - `agent.astream_events({...}, version="v2")` : streaming d'événements.
     """
     tools = build_tools(
         milvus_collection=milvus_collection,
@@ -89,4 +95,5 @@ def build_agent(
         llm,
         tools,
         state_modifier=SystemMessage(content=SYSTEM_PROMPT),
+        checkpointer=checkpointer,
     )

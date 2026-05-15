@@ -38,5 +38,16 @@ class Settings(BaseSettings):
     YOUTUBE_API_KEY: str = ""
     YOUTUBE_API_BASE: str = "https://www.googleapis.com/youtube/v3"
 
+    # MongoDB (LangGraph checkpoints)
+    MONGO_HOST: str = "mongo"
+    MONGO_PORT: int = 27017
+    MONGO_DB: str = "chess_agent"
+    MONGO_HOST_OVERRIDE: str | None = None  # dev local hors Docker → "localhost"
+
+    @property
+    def mongo_uri(self) -> str:
+        host = self.MONGO_HOST_OVERRIDE or self.MONGO_HOST
+        return f"mongodb://{host}:{self.MONGO_PORT}"
+
 
 settings = Settings()
