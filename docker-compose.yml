@@ -16,6 +16,22 @@ services:
         condition: service_healthy
     restart: unless-stopped
 
+  # === Frontend Angular ===
+  # Build multi-stage : Angular build → nginx serve (statics only).
+  # En local : exposé sur ${FRONTEND_PORT}, tape directement http://localhost:8000 (env dev).
+  # Sur VPS : Caddy proxifie chess.duckdns.org/api/* → backend:8000 (cf. docker-compose.prod.yml).
+  frontend:
+    build:
+      context: ./frontend
+    container_name: chess_agent_frontend
+    ports:
+      - "${FRONTEND_PORT:-4200}:80"
+    depends_on:
+      - backend
+    networks:
+      - chess_net
+    restart: unless-stopped
+
   # === Milvus (RAG vector DB) ===
   # Setup standalone : 3 conteneurs (etcd + minio + milvus). C'est le pattern
   # officiel Milvus, plus robuste que l'all-in-one.

@@ -34,8 +34,8 @@ La **chaîne de raisonnement de l'agent doit être visible** dans le panneau de 
 - **Backend** : Python 3.11, FastAPI, LangGraph, python-chess, Stockfish, pymilvus, openai (embeddings + LLM), motor (Mongo async).
 - **Vector DB** : Milvus.
 - **Document DB** : MongoDB (sessions, historiques, caches d'API).
-- **Frontend** : Angular (Node 20 LTS) + ngx-chessboard.
-- **Orchestration** : Docker Compose.
+- **Frontend** : Angular 21 standalone components + Signals + Tailwind CSS v3 + `ngx-chess-board` (échiquier interactif) + `lucide-angular` (icônes).
+- **Orchestration** : Docker Compose (local) + overlay `docker-compose.prod.yml` pour déploiement VPS derrière Caddy.
 
 ## Structure
 
@@ -43,11 +43,19 @@ La **chaîne de raisonnement de l'agent doit être visible** dans le panneau de 
 chess_agent/
 ├── backend/
 │   ├── .venv/              # Python 3.11 (gitignored)
-│   ├── app/                # code FastAPI + LangGraph
+│   ├── app/                # FastAPI + LangGraph (agent, api, services, models)
+│   ├── scripts/            # ingest Wikichess, sanity checks
 │   ├── Dockerfile
 │   └── requirements.txt
-├── frontend/               # Angular app (à initialiser)
-├── docker-compose.yml
+├── frontend/               # Angular 21 standalone + Tailwind v3 + ngx-chess-board
+│   ├── src/app/components/ # board, chat-panel, message-bubble, reasoning-trace, tool-call-card, ...
+│   ├── src/app/services/   # chat, chess, session
+│   ├── src/app/models/     # chat, message, tool-meta (mapping tool → icône/couleur)
+│   ├── Dockerfile          # multi-stage node→nginx
+│   └── nginx.conf          # SPA fallback, pas de proxy /api (géré par Caddy en prod)
+├── docker-compose.yml      # stack locale
+├── docker-compose.prod.yml # overlay VPS (réseau "web" externe, ports retirés)
+├── DEPLOY.md               # procédure déploiement VPS Hetzner + Caddy
 ├── .env.example            # variables documentées
 └── enonce.md               # brief OC original (gitignored)
 ```

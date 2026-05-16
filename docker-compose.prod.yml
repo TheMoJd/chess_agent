@@ -1,0 +1,25 @@
+# Overlay pour déploiement VPS Hetzner derrière Caddy global.
+# Usage :
+#   docker compose -f docker-compose.yml -f docker-compose.prod.yml up -d --build
+#
+# Différences vs docker-compose.yml local :
+# - Pas de ports exposés (Caddy global est le seul point d'entrée HTTPS).
+# - Backend + frontend rejoignent le réseau Docker `web` (où vit Caddy).
+# - Le réseau `chess_net` reste pour la com interne (backend ↔ Milvus/Mongo).
+
+services:
+  frontend:
+    ports: []
+    networks:
+      - chess_net
+      - web
+
+  backend:
+    ports: []
+    networks:
+      - chess_net
+      - web
+
+networks:
+  web:
+    external: true
