@@ -1,4 +1,5 @@
 import {
+  ApplicationRef,
   ChangeDetectionStrategy,
   Component,
   ViewChild,
@@ -53,6 +54,10 @@ interface MoveChangeEvent {
 export class BoardComponent {
   private readonly chess = inject(ChessService);
   private readonly chat = inject(ChatService);
+  // ngx-chess-board mute son state in-place (piece.point.row/col) sans appeler
+  // markForCheck. Quand reverse() est invoqué depuis un signal effect, Angular
+  // ne déclenche pas forcément de CD sur cette lib zone-based → on force tick().
+  private readonly appRef = inject(ApplicationRef);
 
   @ViewChild('board', { static: true }) board!: NgxChessBoardView;
 
@@ -60,6 +65,9 @@ export class BoardComponent {
   readonly size = signal(560);
 
   private lastSyncedFen = '';
+  // ngx-chess-board n'expose pas l'orientation courante — on la track nous-même.
+  // Default white car le board démarre toujours blancs en bas.
+  private currentOrientation: 'white' | 'black' = 'white';
 
   constructor() {
     // Sync vers le board quand un undo/reset change la FEN à l'extérieur.
@@ -71,9 +79,31 @@ export class BoardComponent {
         this.lastSyncedFen = desiredFen;
         if (this.chess.moveCount() === 0) {
           this.board.reset();
+          // ngx-chess-board.reset() ramène toujours à white-en-bas, peu importe
+          // l'orientation courante. On resynchronise notre mirror et on réapplique
+          // reverse() si l'user joue les noirs — sinon le board reste à l'envers.
+          this.currentOrientation = 'white';
+          if (this.chess.userColor() === 'black') {
+            this.board.reverse();
+            this.currentOrientation = 'black';
+          }
+          this.appRef.tick();
         } else {
           this.board.setFEN(desiredFen);
         }
+      }
+    });
+
+    // Sync orientation visuelle ↔ userColor. ngx-chess-board.reverse() est
+    // imperatif (toggle), donc on garde un mirror local et on l'appelle
+    // seulement quand il y a une vraie divergence.
+    effect(() => {
+      const desired = this.chess.userColor();
+      if (!this.board) return;
+      if (this.currentOrientation !== desired) {
+        this.board.reverse();
+        this.currentOrientation = desired;
+        this.appRef.tick();
       }
     });
   }
