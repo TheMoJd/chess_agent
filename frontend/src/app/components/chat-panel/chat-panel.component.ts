@@ -7,7 +7,7 @@ import {
   effect,
   inject,
 } from '@angular/core';
-import { Bot, LucideAngularModule } from 'lucide-angular';
+import { Bot, LucideAngularModule, Sparkles } from 'lucide-angular';
 
 import { ChatService } from '../../services/chat.service';
 import { ChessService } from '../../services/chess.service';
@@ -66,6 +66,20 @@ import { MessageBubbleComponent } from '../message-bubble/message-bubble.compone
         }
       </div>
 
+      <div class="px-3 py-2 border-t border-slate-100 bg-slate-50">
+        <button
+          type="button"
+          class="w-full px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white
+                 disabled:bg-slate-300 disabled:cursor-not-allowed transition
+                 text-sm font-medium flex items-center justify-center gap-2"
+          [disabled]="!chat.canAnalyze()"
+          (click)="chat.analyzeCurrentPosition()"
+        >
+          <lucide-icon [img]="sparklesIcon" class="w-4 h-4"></lucide-icon>
+          {{ chat.loading() ? 'Analyse en cours...' : "Lancer l'analyse" }}
+        </button>
+      </div>
+
       <app-chat-input
         [disabled]="chat.loading()"
         (sendMessage)="onSend($event)"
@@ -77,6 +91,7 @@ export class ChatPanelComponent implements AfterViewInit {
   protected readonly chat = inject(ChatService);
   private readonly chess = inject(ChessService);
   protected readonly botIcon = Bot;
+  protected readonly sparklesIcon = Sparkles;
 
   @ViewChild('scrollContainer', { static: true })
   private scrollContainer!: ElementRef<HTMLDivElement>;

@@ -1,6 +1,6 @@
 import { HttpClient, HttpErrorResponse } from '@angular/common/http';
-import { Injectable, inject, signal } from '@angular/core';
-import { timeout } from 'rxjs';
+import { Injectable, computed, inject, signal } from '@angular/core';
+import { Subscription, timeout } from 'rxjs';
 
 import { environment } from '../../environments/environment';
 import { ChatRequest, ChatResponse } from '../models/chat.model';
@@ -18,6 +18,33 @@ export class ChatService {
   readonly messages = signal<Message[]>([]);
   readonly loading = signal<boolean>(false);
   readonly error = signal<string | null>(null);
+
+  /**
+   * moveCount() au moment du dernier "Lancer l'analyse". Si la valeur est
+   * inférieure à moveCount() courant, c'est qu'un coup a été joué depuis,
+   * donc l'agent n'a pas encore vu la position → le bouton se réactive.
+   */
+  readonly lastAnalyzedMoveCount = signal<number>(0);
+
+  /**
+   * État global du bouton "Lancer l'analyse". Vrai uniquement si :
+   * - pas déjà en train de tourner,
+   * - au moins un coup a été joué,
+   * - et la position courante n'a pas encore été analysée.
+   */
+  readonly canAnalyze = computed(
+    () =>
+      !this.loading() &&
+      this.chess.moveCount() > 0 &&
+      this.chess.moveCount() > this.lastAnalyzedMoveCount(),
+  );
+
+  /**
+   * Subscription HTTP en vol. Mémorisée pour pouvoir l'annuler explicitement
+   * via cancelInFlight() (cf. board.component.ts : si l'user joue pendant
+   * qu'une analyse tourne, on cancel pour ne pas recevoir un avis obsolète).
+   */
+  private inFlight: Subscription | null = null;
 
   /** Notifie l'agent qu'un coup vient d'être joué sur l'échiquier.
    *
@@ -45,6 +72,42 @@ export class ChatService {
     const t = text.trim();
     if (!t) return;
     this.send(t, fen);
+  }
+
+  /**
+   * Déclenche l'analyse du dernier coup joué. Réutilise sendMove() pour le
+   * formattage du message (intro de couleur au 1er message + "j'ai joué X" /
+   * "les noirs jouent X" selon perspective).
+   *
+   * Marque `lastAnalyzedMoveCount` à la valeur courante pour désactiver
+   * immédiatement le bouton — il se réactivera quand l'user jouera un coup.
+   */
+  analyzeCurrentPosition(): void {
+    const last = this.chess.history().at(-1);
+    if (!last) return;
+    this.lastAnalyzedMoveCount.set(this.chess.moveCount());
+    this.sendMove(last.san, last.fenAfter);
+  }
+
+  /**
+   * Annule la requête HTTP en vol. Le message user déjà affiché reste, suivi
+   * d'une ligne système "Analyse annulée" pour que l'historique reflète
+   * fidèlement la réalité (l'user a demandé, puis abandonné).
+   */
+  cancelInFlight(): void {
+    if (!this.inFlight) return;
+    this.inFlight.unsubscribe();
+    this.inFlight = null;
+    this.loading.set(false);
+    this.messages.update((m) => [
+      ...m,
+      {
+        id: crypto.randomUUID(),
+        role: 'system',
+        text: 'Analyse annulée par un nouveau coup.',
+        timestamp: Date.now(),
+      },
+    ]);
   }
 
   /** Informe l'agent que le user a tourné l'échiquier (changement de perspective).
@@ -90,7 +153,7 @@ export class ChatService {
       fen,
     };
 
-    this.http
+    this.inFlight = this.http
       .post<ChatResponse>(this.url, body)
       .pipe(timeout(60_000))
       .subscribe({
@@ -106,18 +169,26 @@ export class ChatService {
             },
           ]);
           this.loading.set(false);
+          this.inFlight = null;
         },
         error: (err) => {
           this.error.set(this.formatError(err));
           this.loading.set(false);
+          this.inFlight = null;
         },
       });
   }
 
   /** Reset l'UI : vide les messages + l'erreur. Ne touche pas au session_id. */
   clear(): void {
+    if (this.inFlight) {
+      this.inFlight.unsubscribe();
+      this.inFlight = null;
+    }
     this.messages.set([]);
     this.error.set(null);
+    this.loading.set(false);
+    this.lastAnalyzedMoveCount.set(0);
   }
 
   private formatError(err: unknown): string {

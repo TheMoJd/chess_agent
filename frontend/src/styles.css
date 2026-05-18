@@ -6,3 +6,13 @@ html,
 body {
   @apply h-full bg-slate-50 font-sans antialiased text-slate-900;
 }
+
+/* ngx-chess-board : la lib s'appuie sur CDK Drag qui anime chaque pièce
+ * via "transition: transform .2s". Sur un flip, les 32 pièces animent en
+ * parallèle → effet lent. On suppress la transition tant que la classe
+ * .no-flip-anim est posée sur le host (toggle via board.component).
+ * Pas un !important sur la lib globalement : on garde l'anim douce pour
+ * un coup normal (une seule pièce se déplace, c'est joli). */
+ngx-chess-board.no-flip-anim .cdk-drag {
+  transition: none !important;
+}
