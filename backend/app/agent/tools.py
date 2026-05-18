@@ -18,6 +18,10 @@ from langchain_core.tools import BaseTool, tool
 from openai import AsyncOpenAI
 from pymilvus import Collection
 
+from app.services.chess_logic import (
+    ChessLogicError,
+    list_legal_moves as fetch_legal_moves,
+)
 from app.services.chessdb import ChessDBError, fetch_opening_moves
 from app.services.stockfish_engine import StockfishError, evaluate_position
 from app.services.wikichess import WikichessSearchError, search_chunks
@@ -71,6 +75,32 @@ def build_tools(
         except Exception as exc:
             logger.exception("opening_theory_lookup unexpected error fen=%r", fen)
             return _err(f"Theory lookup unavailable ({type(exc).__name__}).")
+        return json.dumps(result, ensure_ascii=False, default=str)
+
+    @tool
+    async def list_legal_moves(fen: str) -> str:
+        """List ALL legal moves in the current position, in international SAN.
+
+        Use this as a GUARDRAIL before citing ANY specific move (yours or the
+        opponent's) that did not come from opening_theory_lookup.moves[] or
+        stockfish_evaluate.best_move_san. The chess engine here is the source
+        of truth — if a move isn't in this list, it's illegal, period.
+
+        Args:
+            fen: chess position in FEN notation.
+
+        Returns:
+            JSON with: side_to_move, moves (SAN list), is_check, is_game_over,
+            result.
+        """
+        try:
+            result = fetch_legal_moves(fen)
+        except ChessLogicError as exc:
+            logger.warning("list_legal_moves failed for fen=%r: %s", fen, exc)
+            return _err(f"Legal-moves listing failed: {exc}")
+        except Exception as exc:
+            logger.exception("list_legal_moves unexpected error fen=%r", fen)
+            return _err(f"Legal-moves unavailable ({type(exc).__name__}).")
         return json.dumps(result, ensure_ascii=False, default=str)
 
     @tool
@@ -177,6 +207,7 @@ def build_tools(
 
     return [
         opening_theory_lookup,
+        list_legal_moves,
         stockfish_evaluate,
         wikichess_search,
         find_chess_videos,

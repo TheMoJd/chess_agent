@@ -2,11 +2,19 @@ import {
   ChangeDetectionStrategy,
   Component,
   computed,
+  inject,
   input,
 } from '@angular/core';
+import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
+import { marked } from 'marked';
 
 import { Message } from '../../models/message.model';
 import { ReasoningTraceComponent } from '../reasoning-trace/reasoning-trace.component';
+
+// Configuration marked : GFM activé pour autoriser tables/listes, breaks pour
+// que les \n du LLM deviennent des <br>. Pas de async — on veut un parse
+// synchrone pour pouvoir le brancher dans un computed.
+marked.setOptions({ gfm: true, breaks: true, async: false });
 
 @Component({
   selector: 'app-message-bubble',
@@ -22,7 +30,15 @@ import { ReasoningTraceComponent } from '../reasoning-trace/reasoning-trace.comp
       <div class="flex" [class.justify-end]="isUser()">
         <div class="max-w-[85%] flex flex-col gap-2" [class.items-end]="isUser()">
           <div [class]="bubbleClass()">
-            <p class="whitespace-pre-wrap leading-relaxed">{{ message().text }}</p>
+            <!-- User : texte brut (pas de markdown attendu).
+                 Assistant : on rend le markdown via [innerHTML].
+                 Angular DomSanitizer retire automatiquement scripts/handlers. -->
+            @if (isUser()) {
+              <p class="whitespace-pre-wrap leading-relaxed">{{ message().text }}</p>
+            } @else {
+              <div class="markdown-content text-sm leading-relaxed"
+                   [innerHTML]="renderedMarkdown()"></div>
+            }
           </div>
           @if (!isUser() && hasTraces()) {
             <app-reasoning-trace [traces]="message().toolCalls!"></app-reasoning-trace>
@@ -33,6 +49,8 @@ import { ReasoningTraceComponent } from '../reasoning-trace/reasoning-trace.comp
   `,
 })
 export class MessageBubbleComponent {
+  private readonly sanitizer = inject(DomSanitizer);
+
   readonly message = input.required<Message>();
 
   protected readonly isUser = computed(() => this.message().role === 'user');
@@ -49,4 +67,13 @@ export class MessageBubbleComponent {
       ? 'bg-blue-600 text-white rounded-2xl rounded-br-md px-4 py-2.5 text-sm'
       : 'bg-slate-100 text-slate-900 rounded-2xl rounded-bl-md px-4 py-2.5 text-sm',
   );
+
+  /**
+   * Markdown → HTML sanitisé. `bypassSecurityTrustHtml` est OK ici car la source
+   * est notre backend (sortie LLM filtrée), pas du contenu user-generated arbitraire.
+   */
+  protected readonly renderedMarkdown = computed<SafeHtml>(() => {
+    const html = marked.parse(this.message().text) as string;
+    return this.sanitizer.bypassSecurityTrustHtml(html);
+  });
 }

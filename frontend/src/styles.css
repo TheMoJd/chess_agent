@@ -16,3 +16,66 @@ body {
 ngx-chess-board.no-flip-anim .cdk-drag {
   transition: none !important;
 }
+
+/* Markdown rendu par marked() dans les bulles d'agent.
+ * Les règles ne sont PAS scopées au component car les éléments générés
+ * via [innerHTML] n'ont pas l'attribut _ngcontent d'Angular. On scope donc
+ * via la classe parent .markdown-content. */
+.markdown-content > * + * {
+  margin-top: 0.5rem;
+}
+.markdown-content p {
+  line-height: 1.55;
+}
+.markdown-content strong {
+  font-weight: 600;
+  color: rgb(15 23 42); /* slate-900, légèrement plus foncé que le texte normal */
+}
+.markdown-content em {
+  font-style: italic;
+}
+.markdown-content code {
+  background: rgb(226 232 240); /* slate-200 */
+  padding: 0.1rem 0.35rem;
+  border-radius: 0.25rem;
+  font-size: 0.85em;
+  font-family: ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+.markdown-content ul,
+.markdown-content ol {
+  padding-left: 1.25rem;
+  list-style-position: outside;
+}
+.markdown-content ul {
+  list-style-type: disc;
+}
+.markdown-content ol {
+  list-style-type: decimal;
+}
+.markdown-content li {
+  margin: 0.15rem 0;
+}
+.markdown-content a {
+  color: rgb(37 99 235); /* blue-600 */
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.markdown-content a:hover {
+  color: rgb(29 78 216); /* blue-700 */
+}
+.markdown-content h1,
+.markdown-content h2,
+.markdown-content h3 {
+  font-weight: 600;
+  color: rgb(15 23 42);
+  margin-top: 0.75rem;
+}
+.markdown-content h1 { font-size: 1rem; }
+.markdown-content h2 { font-size: 0.95rem; }
+.markdown-content h3 { font-size: 0.9rem; }
+.markdown-content blockquote {
+  border-left: 3px solid rgb(148 163 184); /* slate-400 */
+  padding-left: 0.75rem;
+  color: rgb(71 85 105); /* slate-600 */
+  font-style: italic;
+}
