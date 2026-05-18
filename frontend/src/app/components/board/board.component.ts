@@ -73,24 +73,26 @@ export class BoardComponent {
     // Sync vers le board quand un undo/reset change la FEN à l'extérieur.
     effect(() => {
       const desiredFen = this.chess.fen();
+      const desiredColor = this.chess.userColor();
       if (!this.board) return;
       const boardFen = this.board.getFEN?.();
-      if (boardFen !== desiredFen) {
-        this.lastSyncedFen = desiredFen;
-        if (this.chess.moveCount() === 0) {
+      if (boardFen === desiredFen) return;
+      this.lastSyncedFen = desiredFen;
+      if (this.chess.moveCount() === 0) {
+        // Mirror mis à jour de façon synchrone pour bloquer toute ré-entrée.
+        // La mutation DOM est différée pour ne pas tick() pendant la CD en cours.
+        const needsReverse = desiredColor === 'black';
+        this.currentOrientation = desiredColor;
+        queueMicrotask(() => {
           this.board.reset();
-          // ngx-chess-board.reset() ramène toujours à white-en-bas, peu importe
-          // l'orientation courante. On resynchronise notre mirror et on réapplique
-          // reverse() si l'user joue les noirs — sinon le board reste à l'envers.
-          this.currentOrientation = 'white';
-          if (this.chess.userColor() === 'black') {
-            this.board.reverse();
-            this.currentOrientation = 'black';
-          }
+          if (needsReverse) this.board.reverse();
           this.appRef.tick();
-        } else {
+        });
+      } else {
+        queueMicrotask(() => {
           this.board.setFEN(desiredFen);
-        }
+          this.appRef.tick();
+        });
       }
     });
 
@@ -100,11 +102,16 @@ export class BoardComponent {
     effect(() => {
       const desired = this.chess.userColor();
       if (!this.board) return;
-      if (this.currentOrientation !== desired) {
+      if (this.currentOrientation === desired) return;
+      // Update du mirror en synchrone pour éviter une double-bascule si l'effect
+      // re-fire avant que le microtask ait tourné. La mutation board.reverse()
+      // est queue-microtaskée pour sortir du cycle de CD courant — sinon
+      // appRef.tick() imbriqué dans la CD déclenche NG0101.
+      this.currentOrientation = desired;
+      queueMicrotask(() => {
         this.board.reverse();
-        this.currentOrientation = desired;
         this.appRef.tick();
-      }
+      });
     });
   }
 

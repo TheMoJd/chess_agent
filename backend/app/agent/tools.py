@@ -68,6 +68,9 @@ def build_tools(
         except ChessDBError as exc:
             logger.warning("opening_theory_lookup failed for fen=%r: %s", fen, exc)
             return _err(f"Theory lookup failed: {exc}")
+        except Exception as exc:
+            logger.exception("opening_theory_lookup unexpected error fen=%r", fen)
+            return _err(f"Theory lookup unavailable ({type(exc).__name__}).")
         return json.dumps(result, ensure_ascii=False, default=str)
 
     @tool
@@ -91,6 +94,13 @@ def build_tools(
         except StockfishError as exc:
             logger.warning("stockfish_evaluate failed for fen=%r: %s", fen, exc)
             return _err(f"Stockfish evaluation failed: {exc}")
+        except Exception as exc:
+            # Filet de sécurité : toute exception non prévue (NotImplementedError
+            # côté event loop, OSError, etc.) doit rester DANS le tool. Sinon
+            # LangGraph la décore avec son "Please fix your mistakes" qui finit
+            # affiché à l'utilisateur — mauvaise expérience.
+            logger.exception("stockfish_evaluate unexpected error fen=%r", fen)
+            return _err(f"Stockfish unavailable ({type(exc).__name__}).")
         return json.dumps(result, ensure_ascii=False, default=str)
 
     @tool
@@ -116,6 +126,9 @@ def build_tools(
         except WikichessSearchError as exc:
             logger.warning("wikichess_search failed for query=%r: %s", query, exc)
             return _err(f"Knowledge search failed: {exc}")
+        except Exception as exc:
+            logger.exception("wikichess_search unexpected error query=%r", query)
+            return _err(f"Knowledge search unavailable ({type(exc).__name__}).")
         return json.dumps(
             {"query": query, "hits": [h.model_dump() for h in chunks]},
             ensure_ascii=False,
@@ -147,6 +160,11 @@ def build_tools(
                 "find_chess_videos failed for opening=%r: %s", opening_name, exc
             )
             return _err(f"Video search failed: {exc}")
+        except Exception as exc:
+            logger.exception(
+                "find_chess_videos unexpected error opening=%r", opening_name
+            )
+            return _err(f"Video search unavailable ({type(exc).__name__}).")
         return json.dumps(
             {
                 "opening_name": opening_name,
