@@ -9,7 +9,8 @@
       "Bash(curl -sX POST http://localhost:8000/api/v1/chat -H \"Content-Type: application/json\" -d '{\"session_id\":\"smoke-test-001\",\"message\":\"What legal moves can I play?\",\"fen\":\"rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1\"}')",
       "Bash(curl -sX POST http://localhost:8000/api/v1/chat -H \"Content-Type: application/json\" -d '{\"session_id\":\"smoke-test-002\",\"message\":\"What legal moves can I play?\",\"fen\":\"rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1\"}')",
       "Bash(docker exec *)",
-      "Bash(curl -sX POST http://localhost:8000/api/v1/chat -H \"Content-Type: application/json\" -d \"{\\\\\"session_id\\\\\":\\\\\"smoke-test-003\\\\\",\\\\\"message\\\\\":\\\\\"Je joue les blancs. J ai joue d4.\\\\\",\\\\\"fen\\\\\":\\\\\"rnbqkbnr/pppppppp/8/8/3P4/8/PPP1PPPP/RNBQKBNR b KQkq d3 0 1\\\\\"}\")"
+      "Bash(curl -sX POST http://localhost:8000/api/v1/chat -H \"Content-Type: application/json\" -d \"{\\\\\"session_id\\\\\":\\\\\"smoke-test-003\\\\\",\\\\\"message\\\\\":\\\\\"Je joue les blancs. J ai joue d4.\\\\\",\\\\\"fen\\\\\":\\\\\"rnbqkbnr/pppppppp/8/8/3P4/8/PPP1PPPP/RNBQKBNR b KQkq d3 0 1\\\\\"}\")",
+      "Bash(curl -s \"http://localhost:8000/api/v1/vector-search?query=quantum+physics&top_k=5\")"
     ]
   }
 }

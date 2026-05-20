@@ -25,6 +25,7 @@ logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")
 logger = logging.getLogger("fetch_wikichess")
 
 OPENINGS: list[str] = [
+    # === Corpus initial ===
     "Italian Game",
     "Sicilian Defence",
     "Ruy Lopez",
@@ -35,6 +36,17 @@ OPENINGS: list[str] = [
     "English Opening",
     "Nimzo-Indian Defence",
     "London System",
+    # === Tier 1 — umbrella + top réponses manquantes ===
+    "Queen's Pawn Game",      # umbrella 1.d4 — corrige le bug "1.d4 → English Opening"
+    "King's Pawn Game",       # umbrella 1.e4 (symétrique)
+    "Slav Defense",           # WP utilise "Defense" (US) pour cet article
+    "Scandinavian Defense",   # WP utilise "Defense" (US)
+    # === Tier 2 — top-tier compétition ===
+    "Grünfeld Defence",
+    "Queen's Indian Defence",
+    "Indian Defence",         # umbrella pour 1.d4 Nf6
+    # === Tier 3 — opening complémentaire ===
+    "Pirc Defence",
 ]
 
 NOISE_SECTIONS: set[str] = {

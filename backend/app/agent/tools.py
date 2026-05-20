@@ -151,7 +151,7 @@ def build_tools(
         """
         try:
             chunks = await search_chunks(
-                query, milvus_collection, openai_client, top_k=3
+                query, milvus_collection, openai_client, top_k=5
             )
         except WikichessSearchError as exc:
             logger.warning("wikichess_search failed for query=%r: %s", query, exc)

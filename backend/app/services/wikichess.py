@@ -30,7 +30,8 @@ async def search_chunks(
     query: str,
     collection: Collection,
     client: AsyncOpenAI,
-    top_k: int = 3,
+    top_k: int = 5,
+    min_score: float = 0.4,
 ) -> list[ChunkHit]:
     """Renvoie les chunks Wikichess les plus pertinents pour `query`.
 
@@ -39,6 +40,10 @@ async def search_chunks(
         collection: collection Milvus déjà connectée et `.load()` au startup.
         client: client OpenAI async.
         top_k: nombre de résultats (1-20 typiquement).
+        min_score: score IP minimal sous lequel un hit est jugé non pertinent
+            et droppé. Défaut 0.4 (seuil "faible" documenté dans ChunkHit.score).
+            Empêche l'agent de citer un chunk off-topic quand le RAG ne trouve
+            pas mieux que des matches sémantiquement éloignés.
 
     Raises:
         WikichessSearchError: échec OpenAI ou Milvus (à transformer en 503 côté route).
@@ -84,4 +89,18 @@ async def search_chunks(
                     score=hit.score,
                 )
             )
-    return hits
+
+    # Garde-fou anti-citation off-topic : on drop tout hit en dessous du seuil.
+    # Si tous les hits sont faibles, on retourne une liste vide et l'agent
+    # devra fallback gracefully (cf. system prompt).
+    filtered = [h for h in hits if h.score >= min_score]
+    if hits and not filtered:
+        logger.info(
+            "wikichess: all %d hits below min_score=%.2f for query=%r "
+            "(top score was %.3f)",
+            len(hits),
+            min_score,
+            query,
+            hits[0].score,
+        )
+    return filtered
