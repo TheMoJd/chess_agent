@@ -133,18 +133,65 @@ export class BoardComponent {
 
   onMove(event: MoveChangeEvent | unknown): void {
     if (!this.board) return;
-    const fen = this.board.getFEN?.();
-    if (!fen || fen === this.lastSyncedFen) return;
-    this.lastSyncedFen = fen;
+    const fenAfter = this.board.getFEN?.();
+    if (!fenAfter || fenAfter === this.lastSyncedFen) return;
+    const fenBefore = this.lastSyncedFen;
+    this.lastSyncedFen = fenAfter;
 
-    const san = this.extractSan(event) ?? this.coordsToFallback(event);
-    this.chess.recordMove(san, fen);
+    // Castle d'abord : ngx-chess-board renvoie l'UCI "e1g1" même pour un roque,
+    // ce qui fait passer le coup pour un coup de roi banal côté agent.
+    // On détecte via la diff de FEN (canonique, indépendante de l'orientation).
+    const san =
+      this.detectCastle(fenBefore, fenAfter) ??
+      this.extractSan(event) ??
+      this.coordsToFallback(event);
+    this.chess.recordMove(san, fenAfter);
     // Plus d'envoi auto : l'user déclenche l'analyse via le bouton dédié.
     // Si une analyse précédente tourne encore, on la cancel — la position a
     // changé, l'avis arriverait obsolète.
     if (this.chat.loading()) {
       this.chat.cancelInFlight();
     }
+  }
+
+  /** Détecte un roque en comparant la colonne du roi avant/après le coup.
+   *
+   * En SAN, "O-O" / "O-O-O" sont les seules notations correctes — l'UCI
+   * "e1g1" laisse l'agent croire à un coup de roi normal. Comme le roi est la
+   * seule pièce qui peut changer de colonne de ±2 en un coup, la diff de file
+   * suffit. On reste sur la FEN (canonique) pour ne pas dépendre du flip
+   * visuel du board.
+   */
+  private detectCastle(
+    fenBefore: string,
+    fenAfter: string,
+  ): 'O-O' | 'O-O-O' | null {
+    if (!fenBefore) return null;
+    // FEN active-color = qui doit jouer ENSUITE → celui qui vient de jouer
+    // est l'opposé. 'w' suivant → noir a joué → on regarde 'k'.
+    const sideToMoveNext = fenAfter.split(' ')[1];
+    const kingChar: 'K' | 'k' = sideToMoveNext === 'w' ? 'k' : 'K';
+    const before = this.kingFile(fenBefore, kingChar);
+    const after = this.kingFile(fenAfter, kingChar);
+    if (before < 0 || after < 0) return null;
+    const delta = after - before;
+    if (delta === 2) return 'O-O';
+    if (delta === -2) return 'O-O-O';
+    return null;
+  }
+
+  /** Retourne la colonne (0-7) du roi `kingChar` dans la FEN, -1 si absent. */
+  private kingFile(fen: string, kingChar: 'K' | 'k'): number {
+    const board = fen.split(' ')[0];
+    for (const rank of board.split('/')) {
+      let col = 0;
+      for (const ch of rank) {
+        if (ch === kingChar) return col;
+        if (ch >= '1' && ch <= '8') col += +ch;
+        else col++;
+      }
+    }
+    return -1;
   }
 
   /** Récupère le SAN du dernier coup via l'historique du board. */

@@ -1,9 +1,25 @@
 """Recherche sémantique RAG dans la base Wikichess (Milvus + OpenAI).
 
+Source de données — important :
+    Le naming "wikichess" est une convention interne du projet, alignée sur le
+    vocabulaire (cf. enonce.md L111, L259, L273). Les
+    données sont en réalité ingérées depuis **Wikipedia (en.wikipedia.org)** via
+    l'API officielle MediaWiki (cf. scripts/fetch_wikichess.py).
+
+    Raison du choix : "Wikichess" n'est pas un service stable et unifié
+    (quelques wikis Fandom isolés existent, mais sans API ni licence claire).
+    Wikipedia offre une couverture supérieure, une API documentée (MediaWiki),
+    et une licence Creative Commons. La L111 du brief autorise explicitement
+    "toutes sources pertinentes" — Wikipedia rentre dans ce cadre.
+
+    Le naming interne "wikichess" est conservé volontairement pour rester
+    aligné avec le vocabulaire du brief et éviter un refactor massif.
+
 Pipeline :
     1. Embed la query via OpenAI (text-embedding-3-large).
     2. Cherche les top-k chunks les plus proches dans Milvus (HNSW, métrique IP).
-    3. Mappe les hits en objets Pydantic `ChunkHit`.
+    3. Filtre les hits sous le seuil `min_score` (anti-citation off-topic).
+    4. Mappe les hits en objets Pydantic `ChunkHit`.
 
 Les clients OpenAI et Milvus sont **injectés** par la route (via app.state),
 pas créés ici — voir le lifespan dans app/main.py.
