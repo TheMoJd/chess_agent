@@ -32,9 +32,17 @@ marked.setOptions({ gfm: true, breaks: true, async: false });
           <div [class]="bubbleClass()">
             <!-- User : texte brut (pas de markdown attendu).
                  Assistant : on rend le markdown via [innerHTML].
-                 Angular DomSanitizer retire automatiquement scripts/handlers. -->
+                 Angular DomSanitizer retire automatiquement scripts/handlers.
+                 Si assistant + texte vide (= en attente du 1er token du stream),
+                 on affiche un indicateur 3-dots à la place. -->
             @if (isUser()) {
               <p class="whitespace-pre-wrap leading-relaxed">{{ message().text }}</p>
+            } @else if (isEmptyAssistant()) {
+              <div class="flex items-center gap-1.5 py-1">
+                <span class="w-1.5 h-1.5 rounded-full bg-slate-400 animate-pulse"></span>
+                <span class="w-1.5 h-1.5 rounded-full bg-slate-400 animate-pulse [animation-delay:150ms]"></span>
+                <span class="w-1.5 h-1.5 rounded-full bg-slate-400 animate-pulse [animation-delay:300ms]"></span>
+              </div>
             } @else {
               <div class="markdown-content text-sm leading-relaxed"
                    [innerHTML]="renderedMarkdown()"></div>
@@ -60,6 +68,11 @@ export class MessageBubbleComponent {
 
   protected readonly hasTraces = computed(
     () => (this.message().toolCalls?.length ?? 0) > 0,
+  );
+
+  /** Bulle assistant en attente du 1er token (text vide). Déclenche le placeholder 3-dots. */
+  protected readonly isEmptyAssistant = computed(
+    () => !this.isUser() && !this.isSystem() && this.message().text === '',
   );
 
   protected readonly bubbleClass = computed(() =>

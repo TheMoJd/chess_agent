@@ -7,7 +7,7 @@ import {
   effect,
   inject,
 } from '@angular/core';
-import { Bot, LucideAngularModule, Sparkles } from 'lucide-angular';
+import { Bot, LucideAngularModule, Sparkles, Square } from 'lucide-angular';
 
 import { ChatService } from '../../services/chat.service';
 import { ChessService } from '../../services/chess.service';
@@ -46,17 +46,6 @@ import { MessageBubbleComponent } from '../message-bubble/message-bubble.compone
         @for (msg of chat.messages(); track msg.id) {
           <app-message-bubble [message]="msg"></app-message-bubble>
         }
-        @if (chat.loading()) {
-          <div class="flex items-center gap-2 px-4 py-3 rounded-2xl bg-slate-100 w-fit">
-            <span class="w-2 h-2 rounded-full bg-slate-400 animate-pulse"></span>
-            <span
-              class="w-2 h-2 rounded-full bg-slate-400 animate-pulse [animation-delay:150ms]"
-            ></span>
-            <span
-              class="w-2 h-2 rounded-full bg-slate-400 animate-pulse [animation-delay:300ms]"
-            ></span>
-          </div>
-        }
         @if (chat.error()) {
           <div
             class="px-4 py-3 rounded-lg bg-rose-50 border border-rose-200 text-sm text-rose-800"
@@ -67,17 +56,31 @@ import { MessageBubbleComponent } from '../message-bubble/message-bubble.compone
       </div>
 
       <div class="px-3 py-2 border-t border-slate-100 bg-slate-50">
-        <button
-          type="button"
-          class="w-full px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white
-                 disabled:bg-slate-300 disabled:cursor-not-allowed transition
-                 text-sm font-medium flex items-center justify-center gap-2"
-          [disabled]="!chat.canAnalyze()"
-          (click)="chat.analyzeCurrentPosition()"
-        >
-          <lucide-icon [img]="sparklesIcon" class="w-4 h-4"></lucide-icon>
-          {{ chat.loading() ? 'Analyse en cours...' : "Lancer l'analyse" }}
-        </button>
+        @if (chat.loading()) {
+          <button
+            type="button"
+            class="w-full px-4 py-2 rounded-lg bg-rose-600 hover:bg-rose-700 text-white
+                   transition text-sm font-medium flex items-center justify-center gap-2
+                   focus:outline-none focus:ring-2 focus:ring-rose-500 focus:ring-offset-2"
+            (click)="chat.cancelInFlight('user')"
+          >
+            <lucide-icon [img]="stopIcon" class="w-4 h-4"></lucide-icon>
+            Arrêter l'analyse
+          </button>
+        } @else {
+          <button
+            type="button"
+            class="w-full px-4 py-2 rounded-lg bg-blue-600 hover:bg-blue-700 text-white
+                   disabled:bg-slate-300 disabled:cursor-not-allowed transition
+                   text-sm font-medium flex items-center justify-center gap-2
+                   focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2"
+            [disabled]="!chat.canAnalyze()"
+            (click)="chat.analyzeCurrentPosition()"
+          >
+            <lucide-icon [img]="sparklesIcon" class="w-4 h-4"></lucide-icon>
+            Lancer l'analyse
+          </button>
+        }
       </div>
 
       <app-chat-input
@@ -92,6 +95,7 @@ export class ChatPanelComponent implements AfterViewInit {
   private readonly chess = inject(ChessService);
   protected readonly botIcon = Bot;
   protected readonly sparklesIcon = Sparkles;
+  protected readonly stopIcon = Square;
 
   @ViewChild('scrollContainer', { static: true })
   private scrollContainer!: ElementRef<HTMLDivElement>;

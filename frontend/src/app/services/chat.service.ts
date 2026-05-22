@@ -1,19 +1,16 @@
-import { HttpClient, HttpErrorResponse } from '@angular/common/http';
 import { Injectable, computed, inject, signal } from '@angular/core';
-import { Subscription, timeout } from 'rxjs';
 
 import { environment } from '../../environments/environment';
-import { ChatRequest, ChatResponse } from '../models/chat.model';
+import { ChatRequest, ToolCallTrace } from '../models/chat.model';
 import { Message } from '../models/message.model';
 import { ChessService, UserColor } from './chess.service';
 import { SessionService } from './session.service';
 
 @Injectable({ providedIn: 'root' })
 export class ChatService {
-  private readonly http = inject(HttpClient);
   private readonly session = inject(SessionService);
   private readonly chess = inject(ChessService);
-  private readonly url = `${environment.apiBaseUrl}/chat`;
+  private readonly url = `${environment.apiBaseUrl}/chat/stream`;
 
   readonly messages = signal<Message[]>([]);
   readonly loading = signal<boolean>(false);
@@ -40,11 +37,17 @@ export class ChatService {
   );
 
   /**
-   * Subscription HTTP en vol. Mémorisée pour pouvoir l'annuler explicitement
-   * via cancelInFlight() (cf. board.component.ts : si l'user joue pendant
-   * qu'une analyse tourne, on cancel pour ne pas recevoir un avis obsolète).
+   * AbortController de la requête SSE en vol. `abort()` coupe net le stream
+   * (la connexion HTTP est fermée côté client, le backend voit un disconnect
+   * et arrête le générateur). Mémorisé pour permettre cancelInFlight().
    */
-  private inFlight: Subscription | null = null;
+  private inFlight: AbortController | null = null;
+
+  /**
+   * ID du message assistant en cours de streaming. Permet de retrouver la
+   * bulle à muter à chaque token sans scan O(n) du tableau messages.
+   */
+  private streamingMessageId: string | null = null;
 
   /** Notifie l'agent qu'un coup vient d'être joué sur l'échiquier.
    *
@@ -93,18 +96,27 @@ export class ChatService {
    * Annule la requête HTTP en vol. Le message user déjà affiché reste, suivi
    * d'une ligne système "Analyse annulée" pour que l'historique reflète
    * fidèlement la réalité (l'user a demandé, puis abandonné).
+   *
+   * `reason` distingue les deux origines possibles :
+   * - 'move' : un coup a été joué pendant l'analyse (déclenché par board.component)
+   * - 'user' : l'user a cliqué sur le bouton "Arrêter" du chat-panel
    */
-  cancelInFlight(): void {
+  cancelInFlight(reason: 'move' | 'user' = 'move'): void {
     if (!this.inFlight) return;
-    this.inFlight.unsubscribe();
+    this.inFlight.abort();
     this.inFlight = null;
+    this.streamingMessageId = null;
     this.loading.set(false);
+    const text =
+      reason === 'user'
+        ? 'Analyse interrompue.'
+        : 'Analyse annulée par un nouveau coup.';
     this.messages.update((m) => [
       ...m,
       {
         id: crypto.randomUUID(),
         role: 'system',
-        text: 'Analyse annulée par un nouveau coup.',
+        text,
         timestamp: Date.now(),
       },
     ]);
@@ -134,13 +146,24 @@ export class ChatService {
       finalMessage = `Je joue ${colorLabel}. ${message}`;
     }
 
-    // Optimistic update : on affiche immédiatement le message user.
+    // Optimistic update : on affiche immédiatement le message user et une
+    // bulle assistant VIDE qui se remplira au fil du stream. L'ID de la bulle
+    // assistant est mémorisé pour append les tokens sans re-scan.
+    const assistantId = crypto.randomUUID();
+    this.streamingMessageId = assistantId;
     this.messages.update((m) => [
       ...m,
       {
         id: crypto.randomUUID(),
         role: 'user',
         text: finalMessage,
+        timestamp: Date.now(),
+      },
+      {
+        id: assistantId,
+        role: 'assistant',
+        text: '',
+        toolCalls: [],
         timestamp: Date.now(),
       },
     ]);
@@ -151,40 +174,174 @@ export class ChatService {
       session_id: this.session.sessionId(),
       message: finalMessage,
       fen,
+      // Source de vérité côté front pour la couleur courante. Le backend
+      // l'injecte dans le HumanMessage sous forme de tag structuré, plus
+      // robuste que de faire inférer l'agent depuis la conversation.
+      user_color: this.chess.userColor(),
     };
 
-    this.inFlight = this.http
-      .post<ChatResponse>(this.url, body)
-      .pipe(timeout(60_000))
-      .subscribe({
-        next: (resp) => {
-          this.messages.update((m) => [
-            ...m,
-            {
-              id: crypto.randomUUID(),
-              role: 'assistant',
-              text: resp.reply,
-              toolCalls: resp.tool_calls,
-              timestamp: Date.now(),
-            },
-          ]);
-          this.loading.set(false);
-          this.inFlight = null;
-        },
-        error: (err) => {
-          this.error.set(this.formatError(err));
-          this.loading.set(false);
-          this.inFlight = null;
-        },
+    // Fire-and-forget : l'async function se résout quand le stream est consommé.
+    // Pas de await — on rend la main au caller (board ou chat-panel) tout de suite.
+    void this.streamRequest(body, assistantId);
+  }
+
+  /** Ouvre le stream SSE et applique chaque event au signal messages.
+   *
+   * Pourquoi pas HttpClient ? Angular's HttpClient ne supporte pas le
+   * `responseType: 'stream'`. fetch + ReadableStream est le seul chemin
+   * stable pour consommer du SSE avec un POST body en 2026.
+   */
+  private async streamRequest(body: ChatRequest, assistantId: string): Promise<void> {
+    const controller = new AbortController();
+    this.inFlight = controller;
+
+    try {
+      const resp = await fetch(this.url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+        signal: controller.signal,
       });
+
+      if (!resp.ok || !resp.body) {
+        throw new Error(`HTTP ${resp.status}`);
+      }
+
+      const reader = resp.body.getReader();
+      const decoder = new TextDecoder();
+      let buffer = '';
+
+      // Pump : on lit le stream chunk par chunk. Les bytes peuvent arriver
+      // au milieu d'une frame SSE → on accumule jusqu'à voir `\n\n`.
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        buffer += decoder.decode(value, { stream: true });
+
+        // Découpe en frames SSE (séparées par double newline).
+        let separatorIdx: number;
+        while ((separatorIdx = buffer.indexOf('\n\n')) !== -1) {
+          const frame = buffer.slice(0, separatorIdx);
+          buffer = buffer.slice(separatorIdx + 2);
+          this.handleSseFrame(frame, assistantId);
+        }
+      }
+    } catch (err) {
+      // AbortError = annulation volontaire (cancelInFlight) → pas une erreur.
+      if (err instanceof DOMException && err.name === 'AbortError') return;
+      this.error.set(this.formatError(err));
+      this.loading.set(false);
+      this.streamingMessageId = null;
+    } finally {
+      if (this.inFlight === controller) this.inFlight = null;
+    }
+  }
+
+  /** Parse une frame SSE (`event: ...\ndata: ...`) et dispatch selon le type.
+   *
+   * Spec SSE : chaque frame contient des lignes `key: value`. On ne gère que
+   * `event:` et `data:` — les autres (`id:`, `retry:`) ne sont pas utilisés
+   * côté backend. Les commentaires (`:` en début de ligne) sont ignorés.
+   */
+  private handleSseFrame(frame: string, assistantId: string): void {
+    let eventType = 'message';
+    let dataLine = '';
+    for (const line of frame.split('\n')) {
+      if (line.startsWith('event:')) eventType = line.slice(6).trim();
+      else if (line.startsWith('data:')) dataLine += line.slice(5).trim();
+    }
+    if (!dataLine) return;
+
+    let data: unknown;
+    try {
+      data = JSON.parse(dataLine);
+    } catch {
+      return; // frame corrompue, on skip silencieusement
+    }
+
+    switch (eventType) {
+      case 'token':
+        this.appendToken(assistantId, (data as { text: string }).text);
+        break;
+      case 'tool_start':
+        this.appendToolCall(assistantId, data as { id: string; name: string; args: Record<string, unknown> });
+        break;
+      case 'tool_end':
+        this.completeToolCall(assistantId, data as { id: string; result: string });
+        break;
+      case 'done':
+        this.loading.set(false);
+        this.streamingMessageId = null;
+        break;
+      case 'error':
+        this.error.set((data as { detail: string }).detail);
+        this.loading.set(false);
+        this.streamingMessageId = null;
+        break;
+    }
+  }
+
+  /** Append text à la bulle assistant en cours. Mutation immutable du signal. */
+  private appendToken(assistantId: string, text: string): void {
+    this.messages.update((m) =>
+      m.map((msg) =>
+        msg.id === assistantId ? { ...msg, text: msg.text + text } : msg,
+      ),
+    );
+  }
+
+  /** Ajoute un tool call (avec result vide) à la bulle assistant.
+   *
+   * On stocke l'id LangGraph dans args.__id pour matcher le tool_end plus
+   * tard — `ToolCallTrace` du backend n'a pas de champ id natif, donc on
+   * détourne `args` qui est un dict ouvert.
+   */
+  private appendToolCall(
+    assistantId: string,
+    payload: { id: string; name: string; args: Record<string, unknown> },
+  ): void {
+    const trace: ToolCallTrace & { __id: string } = {
+      __id: payload.id,
+      name: payload.name,
+      args: payload.args,
+      result: '',
+    };
+    this.messages.update((m) =>
+      m.map((msg) =>
+        msg.id === assistantId
+          ? { ...msg, toolCalls: [...(msg.toolCalls ?? []), trace] }
+          : msg,
+      ),
+    );
+  }
+
+  /** Remplit le `result` du tool call matchant l'id LangGraph. */
+  private completeToolCall(
+    assistantId: string,
+    payload: { id: string; result: string },
+  ): void {
+    this.messages.update((m) =>
+      m.map((msg) => {
+        if (msg.id !== assistantId || !msg.toolCalls) return msg;
+        return {
+          ...msg,
+          toolCalls: msg.toolCalls.map((tc) =>
+            (tc as ToolCallTrace & { __id?: string }).__id === payload.id
+              ? { ...tc, result: payload.result }
+              : tc,
+          ),
+        };
+      }),
+    );
   }
 
   /** Reset l'UI : vide les messages + l'erreur. Ne touche pas au session_id. */
   clear(): void {
     if (this.inFlight) {
-      this.inFlight.unsubscribe();
+      this.inFlight.abort();
       this.inFlight = null;
     }
+    this.streamingMessageId = null;
     this.messages.set([]);
     this.error.set(null);
     this.loading.set(false);
@@ -192,18 +349,11 @@ export class ChatService {
   }
 
   private formatError(err: unknown): string {
-    if (err instanceof HttpErrorResponse) {
-      if (err.status === 0) {
-        return "Backend injoignable. Vérifie qu'il tourne sur :8000.";
-      }
-      if (err.status >= 500) {
-        return `Erreur serveur (${err.status}). Réessaie dans un instant.`;
-      }
-      const detail = (err.error as { detail?: string } | null)?.detail;
-      return `Erreur ${err.status}${detail ? ` : ${detail}` : ''}`;
+    if (err instanceof TypeError && err.message.includes('fetch')) {
+      return "Backend injoignable. Vérifie qu'il tourne sur :8000.";
     }
-    if (err instanceof Error && err.name === 'TimeoutError') {
-      return 'Délai dépassé (60s). Le backend met trop de temps à répondre.';
+    if (err instanceof Error) {
+      return err.message;
     }
     return 'Erreur inattendue.';
   }

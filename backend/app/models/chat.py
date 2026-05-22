@@ -1,5 +1,5 @@
 """Schémas Pydantic pour l'endpoint /chat (avec checkpoints LangGraph)."""
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field
 
@@ -22,6 +22,15 @@ class ChatRequest(BaseModel):
     fen: str | None = Field(
         None,
         description="Position FEN courante. Injectée comme contexte du tour.",
+    )
+    user_color: Literal["white", "black"] = Field(
+        "white",
+        description=(
+            "Couleur que l'utilisateur joue actuellement. Source de vérité "
+            "déterministe — injectée à chaque tour pour que l'agent n'ait pas "
+            "à inférer depuis l'historique (l'inférence est fragile quand "
+            "l'user a flip-flop en cours de session)."
+        ),
     )
 
 

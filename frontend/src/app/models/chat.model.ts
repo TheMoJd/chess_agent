@@ -4,6 +4,7 @@ export interface ChatRequest {
   session_id: string;
   message: string;
   fen: string | null;
+  user_color: 'white' | 'black';
 }
 
 export interface ToolCallTrace {

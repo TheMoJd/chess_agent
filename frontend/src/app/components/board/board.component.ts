@@ -82,22 +82,20 @@ export class BoardComponent {
       const boardFen = this.board.getFEN?.();
       if (boardFen === desiredFen) return;
       this.lastSyncedFen = desiredFen;
-      if (this.chess.moveCount() === 0) {
-        // Mirror mis à jour de façon synchrone pour bloquer toute ré-entrée.
-        // La mutation DOM est différée pour ne pas CD pendant la phase en cours.
-        const needsReverse = desiredColor === 'black';
-        this.currentOrientation = desiredColor;
-        queueMicrotask(() => {
-          this.board.reset();
-          if (needsReverse) this.flipBoardInstant();
-          else this.cdr.detectChanges();
-        });
-      } else {
-        queueMicrotask(() => {
-          this.board.setFEN(desiredFen);
-          this.cdr.detectChanges();
-        });
-      }
+      // ngx-chess-board.reset() ET .setFEN() forcent tous les deux
+      // board.reverted = false en interne (cf. DefaultFenProcessor + board.reset).
+      // → Après ces appels, le board est TOUJOURS en perspective blanche.
+      // On doit donc re-flipper explicitement si userColor === 'black',
+      // sinon undo en jouant les noirs fait basculer visuellement en blancs.
+      const needsReverse = desiredColor === 'black';
+      this.currentOrientation = desiredColor;
+      const isInitial = this.chess.moveCount() === 0;
+      queueMicrotask(() => {
+        if (isInitial) this.board.reset();
+        else this.board.setFEN(desiredFen);
+        if (needsReverse) this.flipBoardInstant();
+        else this.cdr.detectChanges();
+      });
     });
 
     // Sync orientation visuelle ↔ userColor. ngx-chess-board.reverse() est
