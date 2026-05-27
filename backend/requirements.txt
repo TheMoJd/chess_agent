@@ -15,3 +15,11 @@ langgraph-checkpoint-mongodb==0.1.1
 motor==3.6.0
 # Patch setuptools < 81 pour pymilvus (cf. memo de l'install initiale)
 setuptools==80.10.2
+# Auth (email/password + JWT) + quota
+passlib[bcrypt]==1.7.4
+# bcrypt 4.3+ déclenche un warning "error reading bcrypt version" avec passlib 1.7.4 → pin 4.2.x
+bcrypt==4.2.1
+python-jose[cryptography]==3.3.0
+email-validator==2.2.0
+# Rate-limit signup uniquement (slowapi décorateur sur la route)
+slowapi==0.1.9

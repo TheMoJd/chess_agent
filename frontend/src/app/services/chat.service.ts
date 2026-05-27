@@ -3,13 +3,29 @@ import { Injectable, computed, inject, signal } from '@angular/core';
 import { environment } from '../../environments/environment';
 import { ChatRequest, ToolCallTrace } from '../models/chat.model';
 import { Message } from '../models/message.model';
+import { AuthService } from './auth.service';
 import { ChessService, UserColor } from './chess.service';
 import { SessionService } from './session.service';
+
+/**
+ * Erreur typée portant le code HTTP issu d'un fetch SSE non-ok.
+ *
+ * `fetch()` ne lève pas d'erreur sur les 4xx/5xx (contrairement à HttpClient),
+ * et l'intercepteur Angular ne s'applique pas non plus à ce flux. On encapsule
+ * donc le status nous-mêmes pour pouvoir afficher un message spécifique
+ * (quota épuisé = 429, etc.) dans `formatError`.
+ */
+class StreamHttpError extends Error {
+  constructor(public readonly status: number, public readonly detail?: string) {
+    super(`HTTP ${status}${detail ? `: ${detail}` : ''}`);
+  }
+}
 
 @Injectable({ providedIn: 'root' })
 export class ChatService {
   private readonly session = inject(SessionService);
   private readonly chess = inject(ChessService);
+  private readonly auth = inject(AuthService);
   private readonly url = `${environment.apiBaseUrl}/chat/stream`;
 
   readonly messages = signal<Message[]>([]);
@@ -196,15 +212,41 @@ export class ChatService {
     this.inFlight = controller;
 
     try {
+      // L'intercepteur authInterceptor ne s'applique qu'à HttpClient ; ici on
+      // utilise fetch (SSE), donc on injecte le Bearer à la main.
+      const token = this.auth.token();
+      const headers: Record<string, string> = {
+        'Content-Type': 'application/json',
+      };
+      if (token) headers['Authorization'] = `Bearer ${token}`;
+
       const resp = await fetch(this.url, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers,
         body: JSON.stringify(body),
         signal: controller.signal,
       });
 
       if (!resp.ok || !resp.body) {
-        throw new Error(`HTTP ${resp.status}`);
+        // On lit le body texte pour récupérer le {detail:"..."} FastAPI quand
+        // il existe — c'est ce qui contient les messages utiles (quota
+        // exhausted, etc.). Try/catch parce que le body peut être absent.
+        let detail: string | undefined;
+        try {
+          const text = await resp.text();
+          if (text) {
+            const parsed = JSON.parse(text) as { detail?: string };
+            detail = parsed.detail;
+          }
+        } catch {
+          /* body non-JSON → on garde detail=undefined */
+        }
+        // 401 : token expiré ou absent → logout (clear + redirect /login).
+        // Pas géré par l'intercepteur car ce stream passe par fetch direct.
+        if (resp.status === 401) {
+          this.auth.logout();
+        }
+        throw new StreamHttpError(resp.status, detail);
       }
 
       const reader = resp.body.getReader();
@@ -272,6 +314,10 @@ export class ChatService {
       case 'done':
         this.loading.set(false);
         this.streamingMessageId = null;
+        // Rafraîchit le compteur de quota côté front. Le backend a déjà
+        // décrémenté avant le stream — on relit pour synchroniser le badge
+        // du header. error: noop → si /me échoue (401), l'intercepteur logout.
+        this.auth.refreshMe().subscribe({ error: () => {} });
         break;
       case 'error':
         this.error.set((data as { detail: string }).detail);
@@ -349,6 +395,25 @@ export class ChatService {
   }
 
   private formatError(err: unknown): string {
+    if (err instanceof StreamHttpError) {
+      if (err.status === 429) {
+        // Le backend renvoie deux types de 429 :
+        // - quota messages épuisé (consume_quota),
+        // - rate-limit slowapi (réservé à /auth/signup, ne devrait pas tomber ici).
+        // Le detail discrimine, mais par défaut on assume le quota.
+        return (
+          err.detail ??
+          'Quota de messages épuisé. Contacte l\'admin pour réinitialiser.'
+        );
+      }
+      if (err.status === 401) {
+        return 'Session expirée. Reconnecte-toi.';
+      }
+      if (err.status >= 500) {
+        return `Erreur serveur (${err.status}). Réessaie dans un instant.`;
+      }
+      return err.detail ?? `Erreur ${err.status}.`;
+    }
     if (err instanceof TypeError && err.message.includes('fetch')) {
       return "Backend injoignable. Vérifie qu'il tourne sur :8000.";
     }

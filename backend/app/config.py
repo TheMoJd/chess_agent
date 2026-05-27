@@ -49,5 +49,19 @@ class Settings(BaseSettings):
         host = self.MONGO_HOST_OVERRIDE or self.MONGO_HOST
         return f"mongodb://{host}:{self.MONGO_PORT}"
 
+    # Auth (JWT email/password) + quota par compte
+    # JWT_SECRET DOIT être override en prod via .env (génération : openssl rand -hex 32).
+    # La valeur par défaut "change-me-in-prod" sert au dev local uniquement.
+    JWT_SECRET: str = "change-me-in-prod"
+    JWT_ALGORITHM: str = "HS256"
+    JWT_EXPIRE_MINUTES: int = 60 * 24 * 7  # 7 jours
+
+    # Quota total fixe par utilisateur (à vie, pas de reset auto).
+    # Reset manuel via Mongo : db.users.updateOne({email}, {$set: {messages_used: 0}}).
+    MESSAGE_QUOTA_PER_USER: int = 50
+
+    # Rate-limit slowapi sur /auth/signup uniquement, syntaxe "<count>/<period>".
+    SIGNUP_RATE_LIMIT: str = "5/hour"
+
 
 settings = Settings()

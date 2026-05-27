@@ -11,11 +11,13 @@ import json
 import logging
 from typing import AsyncIterator
 
-from fastapi import APIRouter, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import StreamingResponse
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 
+from app.api.deps import consume_quota
 from app.models.chat import ChatRequest, ChatResponse, ToolCallTrace
+from app.models.user import UserPublic
 
 logger = logging.getLogger(__name__)
 
@@ -51,7 +53,11 @@ def _sse_event(event_type: str, data: dict) -> bytes:
 
 
 @router.post("/chat", response_model=ChatResponse)
-async def chat(request: Request, payload: ChatRequest) -> ChatResponse:
+async def chat(
+    request: Request,
+    payload: ChatRequest,
+    user: UserPublic = Depends(consume_quota),  # noqa: ARG001 — décrémente le quota, 429 si épuisé
+) -> ChatResponse:
     """Invoque l'agent sur un thread persisté et renvoie réponse + reasoning trace.
 
     LangGraph récupère l'historique du thread depuis Mongo à chaque appel, n'a
@@ -87,7 +93,11 @@ async def chat(request: Request, payload: ChatRequest) -> ChatResponse:
 
 
 @router.post("/chat/stream")
-async def chat_stream(request: Request, payload: ChatRequest) -> StreamingResponse:
+async def chat_stream(
+    request: Request,
+    payload: ChatRequest,
+    user: UserPublic = Depends(consume_quota),  # noqa: ARG001 — décrémente AVANT le stream
+) -> StreamingResponse:
     """Variante streaming de /chat. Émet des events SSE au fil du raisonnement.
 
     Types d'events émis :

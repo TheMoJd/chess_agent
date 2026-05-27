@@ -1,7 +1,9 @@
 """Route /api/v1/videos/{opening_name} — recherche YouTube pour une ouverture."""
 import httpx
-from fastapi import APIRouter, HTTPException, Path, Query, Request
+from fastapi import APIRouter, Depends, HTTPException, Path, Query, Request
 
+from app.api.deps import get_current_user
+from app.models.user import UserPublic
 from app.models.youtube import VideosResponse
 from app.services.youtube import YouTubeError, search_videos
 
@@ -17,6 +19,7 @@ async def get_videos(
     max_results: int = Query(
         5, ge=1, le=10, description="Nombre de vidéos à retourner (1-10)."
     ),
+    user: UserPublic = Depends(get_current_user),  # noqa: ARG001 — auth requise, pas de quota
 ) -> VideosResponse:
     client: httpx.AsyncClient = request.app.state.http_client
     try:
