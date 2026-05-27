@@ -17,6 +17,7 @@ Ce document décrit l'architecture en 6 vues complémentaires (système, backend
 | 7 | Source théorie d'ouvertures | **chessdb.cn** (Lichess Explorer indisponible depuis fév 2026) |
 | 8 | Embeddings RAG | **OpenAI `text-embedding-3-large`** (3072 dim, 8192 tokens de contexte) |
 | 9 | Responsive | desktop only (POC) |
+| 10 | Source du corpus RAG | **Wikipedia EN** en substitution de Wikichess (voir [note ci-dessous](#source-du-corpus-rag--wikichess--wikipedia)) |
 
 ## Périmètre fonctionnel
 
@@ -259,6 +260,24 @@ def youtube_search(opening_name: str) -> list[dict]:
 | `chunk_index` | int64 | ordre dans l'article source |
 
 **Index** : HNSW, metric `IP` (vecteurs OpenAI déjà normalisés), params `{M: 8, efConstruction: 64}` — suffisant pour quelques centaines de chunks.
+
+### Source du corpus RAG — Wikichess → Wikipedia
+
+**Décision** : le corpus RAG est constitué d'articles **Wikipedia EN** d'ouvertures (18 ouvertures curées → 129 chunks), et non du site Wikichess (ficgs.com) cité par l'énoncé.
+
+**Ce que l'énoncé autorise** : le brief OC demande *« une intégration des données issues de Wikichess dans une base Milvus pour la recherche vectorielle »* mais précise explicitement *« (toutes sources pertinentes sont acceptées) »*. La substitution est donc un choix permis, pas une déviation.
+
+**Pourquoi pas ficgs.com Wikichess** (site inspecté avant décision) :
+
+| Composante de Wikichess | Verdict |
+|---|---|
+| **Prose des articles** | Dérivée de Wikipedia (texte verbatim, ex. l'article « King's Pawn Game »). On récupère le même contenu via l'API MediaWiki, en mieux : UTF-8 (Wikichess est en latin-1), sections nettoyées, licence claire (CC BY-SA). |
+| **Structure position→coups + stats** | Déjà couverte par le tool `opening_theory_lookup` (chessdb.cn : coups légaux + statistiques maîtres par FEN). Wikichess n'apporte rien de neuf ici. |
+| **Volume / scrapabilité** | 268 143 pages indexées par position (`wikichess_<N>.html`), HTML legacy sans API, site affichant lui-même un bandeau « under attack ». Crawl disproportionné pour un POC de 2 semaines. |
+
+**Conclusion** : Wikichess = prose Wikipedia + arbre de coups. Les deux composantes sont déjà disponibles chez nous via de meilleures sources (Wikipedia API pour la prose, chessdb pour les coups). Wikipedia EN est retenu pour la qualité, la licence et la stabilité d'accès.
+
+**Réversibilité** : l'architecture est source-agnostique. Repasser à Wikichess (ou ajouter une autre source) = un changement localisé dans [`backend/scripts/fetch_wikichess.py`](../backend/scripts/fetch_wikichess.py), sans impact sur le reste du pipeline (chunking, embeddings, index Milvus, tool `wikichess_search`).
 
 ### Stratégie de cache
 

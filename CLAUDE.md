@@ -10,7 +10,7 @@ LangGraph + LLM avec **tool-calling**. Le LLM est l'orchestrateur, pas un `if/el
 
 - `opening_theory_lookup(fen)` — coups théoriques + nom de l'ouverture. Source actuelle : chessdb.cn (l'API Lichess Opening Explorer est indisponible depuis l'incident OVH de février 2026, voir [services/lichess.py](backend/app/services/lichess.py) pour réactivation future).
 - `stockfish_evaluate(fen)` — meilleur coup + score (centipawns), utilisé hors théorie.
-- `wikichess_search(query)` — RAG Milvus sur articles Wikichess.
+- `wikichess_search(query)` — RAG Milvus sur articles **Wikipedia** d'ouvertures (substitution de Wikichess, autorisée par l'énoncé « toutes sources pertinentes acceptées » ; justification dans [docs/architecture.md](docs/architecture.md#source-du-corpus-rag--wikichess--wikipedia)). Le nom du tool abstrait volontairement le fournisseur (cf. convention de naming plus bas).
 - `find_chess_videos(opening_name)` — vidéos pertinentes (YouTube Data API v3).
 
 La **chaîne de raisonnement de l'agent doit être visible** dans le panneau de droite du front (c'est le wow factor du POC).

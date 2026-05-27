@@ -42,6 +42,23 @@ def _build_user_message(payload: ChatRequest) -> str:
     return "\n".join(tags) + "\n\n" + payload.message
 
 
+def _thread_id(user: UserPublic, session_id: str) -> str:
+    """Construit le thread_id LangGraph en le namespaçant par utilisateur.
+
+    SÉCURITÉ (anti-IDOR) — le `session_id` vient du client (UUID localStorage)
+    et n'est pas un secret. Si on l'utilisait seul comme thread_id, un
+    utilisateur authentifié pourrait lire/poursuivre la conversation d'un autre
+    en devinant ou interceptant son session_id (l'agent recharge tout
+    l'historique du thread depuis Mongo).
+
+    En préfixant par `user.id` — issu du JWT signé, donc non falsifiable sans le
+    secret serveur — chaque thread est cloisonné à son propriétaire. L'isolation
+    ne repose plus sur la confidentialité du session_id mais sur l'identité
+    authentifiée : `userA:sess` et `userB:sess` sont deux threads disjoints.
+    """
+    return f"{user.id}:{session_id}"
+
+
 def _sse_event(event_type: str, data: dict) -> bytes:
     """Formate une frame SSE. Convention : `event:` + `data:` + blank line.
 
@@ -56,7 +73,7 @@ def _sse_event(event_type: str, data: dict) -> bytes:
 async def chat(
     request: Request,
     payload: ChatRequest,
-    user: UserPublic = Depends(consume_quota),  # noqa: ARG001 — décrémente le quota, 429 si épuisé
+    user: UserPublic = Depends(consume_quota),  # décrémente le quota (429 si épuisé) + identité du thread
 ) -> ChatResponse:
     """Invoque l'agent sur un thread persisté et renvoie réponse + reasoning trace.
 
@@ -71,7 +88,7 @@ async def chat(
     content = _build_user_message(payload)
 
     new_msg = HumanMessage(content=content)
-    config = {"configurable": {"thread_id": payload.session_id}}
+    config = {"configurable": {"thread_id": _thread_id(user, payload.session_id)}}
 
     # Compte les messages déjà présents dans le thread pour slicer la trace de CE tour.
     try:
@@ -96,7 +113,7 @@ async def chat(
 async def chat_stream(
     request: Request,
     payload: ChatRequest,
-    user: UserPublic = Depends(consume_quota),  # noqa: ARG001 — décrémente AVANT le stream
+    user: UserPublic = Depends(consume_quota),  # décrémente AVANT le stream + identité du thread
 ) -> StreamingResponse:
     """Variante streaming de /chat. Émet des events SSE au fil du raisonnement.
 
@@ -117,7 +134,7 @@ async def chat_stream(
     content = _build_user_message(payload)
 
     new_msg = HumanMessage(content=content)
-    config = {"configurable": {"thread_id": payload.session_id}}
+    config = {"configurable": {"thread_id": _thread_id(user, payload.session_id)}}
 
     async def event_generator() -> AsyncIterator[bytes]:
         try:

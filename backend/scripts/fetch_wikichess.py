@@ -1,4 +1,14 @@
-"""Récupère 10 articles d'ouvertures depuis Wikipedia EN et les sauvegarde en markdown.
+"""Récupère des articles d'ouvertures depuis Wikipedia EN et les sauvegarde en markdown.
+
+POURQUOI WIKIPEDIA ET PAS WIKICHESS (ficgs.com) ?
+L'énoncé OC cite « Wikichess » comme source RAG mais précise « (toutes sources
+pertinentes sont acceptées) ». Après inspection de ficgs.com/wikichess :
+  - sa prose est dérivée de Wikipedia (texte souvent verbatim) ;
+  - sa valeur structurelle (arbre position→coups + stats) est déjà couverte par
+    le tool `opening_theory_lookup` (chessdb.cn) ;
+  - 268k pages HTML legacy en latin-1, sans API → crawl disproportionné pour un POC.
+On retient donc Wikipedia EN (API MediaWiki propre, UTF-8, licence CC BY-SA).
+Justification complète : docs/architecture.md § "Source du corpus RAG".
 
 Utilise l'API MediaWiki en direct (httpx + User-Agent custom) pour éviter les
 blocages que subissent les wrappers comme `wikipedia` qui n'identifient pas

@@ -1,8 +1,25 @@
+import logging
+from typing import Literal
+
+from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+logger = logging.getLogger(__name__)
+
+# Secrets JWT publiquement connus (placeholders du repo) → interdits en prod.
+_INSECURE_JWT_SECRETS = frozenset({"", "change-me-in-prod"})
+# Longueur minimale d'une clé HS256 : le secret doit avoir au moins autant
+# d'entropie que la sortie du hash (256 bits). `openssl rand -hex 32` → 64 chars.
+_MIN_JWT_SECRET_LEN = 32
 
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", extra="ignore")
+
+    # Mode de déploiement. En "production" les garde-fous de sécurité sont
+    # stricts (fail-closed) ; en "development" on tolère les valeurs par défaut
+    # mais on alerte. Piloté par la variable d'env ENVIRONMENT.
+    ENVIRONMENT: Literal["development", "production"] = "development"
 
     BACKEND_PORT: int = 8000
     STOCKFISH_PATH: str = "/usr/games/stockfish"
@@ -62,6 +79,47 @@ class Settings(BaseSettings):
 
     # Rate-limit slowapi sur /auth/signup uniquement, syntaxe "<count>/<period>".
     SIGNUP_RATE_LIMIT: str = "5/hour"
+
+    @model_validator(mode="after")
+    def _enforce_secure_jwt_secret(self) -> "Settings":
+        """Fail-closed : refuse de démarrer avec un JWT_SECRET faible en prod.
+
+        HS256 est symétrique → le MÊME secret signe et vérifie les tokens. Un
+        secret par défaut/connu/trop court permet à un attaquant de forger un
+        token valide pour n'importe quel `sub` (= usurpation totale d'un compte
+        + contournement du quota). On élève donc le risque de "mauvaise config
+        silencieuse" à un échec de démarrage explicite.
+
+        - production : tout secret faible (placeholder, vide, < 32 chars) →
+          ValueError → l'app NE DÉMARRE PAS. Impossible de shipper la faille.
+        - development : on laisse passer (confort docker compose local) mais on
+          loggue un warning visible à chaque boot.
+
+        Ce validator tourne à l'instanciation de Settings (import du module),
+        donc il couvre TOUS les points d'entrée : uvicorn, scripts, tests.
+        """
+        secret = self.JWT_SECRET
+        is_weak = (
+            secret in _INSECURE_JWT_SECRETS or len(secret) < _MIN_JWT_SECRET_LEN
+        )
+        if not is_weak:
+            return self
+
+        if self.ENVIRONMENT == "production":
+            raise ValueError(
+                "JWT_SECRET non sécurisé (placeholder par défaut, vide, ou "
+                f"< {_MIN_JWT_SECRET_LEN} caractères) alors que "
+                "ENVIRONMENT=production. Génère une clé forte avec "
+                "`openssl rand -hex 32` et renseigne-la dans .env. "
+                "Démarrage refusé (fail-closed)."
+            )
+
+        logger.warning(
+            "JWT_SECRET faible détecté (ENVIRONMENT=development). "
+            "Acceptable en local UNIQUEMENT. Avant tout déploiement : génère "
+            "`openssl rand -hex 32` et passe ENVIRONMENT=production."
+        )
+        return self
 
 
 settings = Settings()
